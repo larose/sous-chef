@@ -503,7 +503,7 @@ class Client(models.Model):
             )
             return json.loads(meals_schedule_option.value)
         except Client_option.DoesNotExist:
-            return []
+            return None
 
 
     @property
@@ -548,10 +548,21 @@ class Client(models.Model):
             A python list of days.
         """
         option = Option.objects.get(name='meals_schedule')
-        Client_option.objects.create(
-            client=self,
-            option=option,
-            value=json.dumps(schedule),
+        id = None
+        try:
+            meals_schedule_option = Client_option.objects.get(
+                client=self, option=option
+            )
+            id = meals_schedule_option.id
+        except Client_option.DoesNotExist:
+            pass
+        Client_option.objects.update_or_create(
+            id=id,
+            defaults={
+                'client':self,
+                'option':option,
+                'value':json.dumps(schedule),
+            }
         )
 
     @staticmethod

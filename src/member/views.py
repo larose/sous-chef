@@ -33,6 +33,7 @@ from member.forms import (
     ClientBasicInformation,
     ClientAddressInformation,
     ClientReferentInformation,
+    ClientRestrictionsInformation,
 )
 from note.models import Note
 from order.mixins import AjaxableResponseMixin
@@ -207,6 +208,96 @@ class ClientUpdateReferentInformation(generic.edit.FormView):
 
         client.route = form['route']
         client.delivery_note = form['delivery_note']
+        client.save()
+
+
+class ClientUpdateDietaryRestriction(generic.edit.FormView):
+    template_name = 'client/update/dietary_restriction.html'
+    form_class = ClientRestrictionsInformation
+    success_url = reverse_lazy('member:list')
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        return super(
+            ClientUpdateDietaryRestriction,
+            self).dispatch(
+            *args,
+            **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super(
+            ClientUpdateDietaryRestriction,
+            self).get_context_data(
+            **kwargs)
+        context.update({'current_step': 'dietary_restriction'})
+        context.update({'client_id': self.kwargs['client_id']})
+        return context
+
+    def get_initial(self):
+        initial = super(ClientUpdateDietaryRestriction, self).get_initial()
+        client = get_object_or_404(
+            Client, pk=self.kwargs.get('client_id')
+        )
+        initial = {
+            'status': True if client.status == Client.ACTIVE else False,
+            'delivery_type': client.delivery_type,
+            'meals_schedule': client.simple_meals_schedule,
+            'restrictions': client.restrictions.all,
+            'ingredient_to_avoid': client.ingredients_to_avoid.all,
+            'dish_to_avoid': client.components_to_avoid.all,
+            'food_preparation': client.food_preparation,
+        }
+        return initial
+
+    def form_valid(self, form):
+        # This method is called when valid form data has been POSTed.
+        # It should return an HttpResponse.
+        client = get_object_or_404(
+            Client, pk=self.kwargs.get('client_id')
+        )
+        self.save(form.cleaned_data, client)
+        return super(ClientUpdateDietaryRestriction, self).form_valid(form)
+
+    def save(self, form, client):
+        """
+        Save the basic information step data.
+        """
+        # Save meals schedule as a Client option
+        client.set_meals_schedule(
+            form['meals_schedule']
+        )
+
+        # Save restricted items
+        client.restrictions.clear()
+        for restricted_item in form['restrictions']:
+            Restriction.objects.create(
+                client=client,
+                restricted_item=restricted_item
+            )
+
+        #client.food_preparation.delete()
+        #for food_preparation in form['food_preparation']:
+        #    Client_option.objects.create(
+        #        client=client,
+        #        option=food_preparation
+        #    )
+
+        # Save ingredients to avoid
+        client.ingredients_to_avoid.clear()
+        for ingredient_to_avoid in form['ingredient_to_avoid']:
+            Client_avoid_ingredient.objects.create(
+                client=client,
+                ingredient=ingredient_to_avoid
+            )
+
+        # Save components to avoid
+        client.components_to_avoid.clear()
+        for component_to_avoid in form['dish_to_avoid']:
+            Client_avoid_component.objects.create(
+                client=client,
+                component=component_to_avoid
+            )
+
         client.save()
 
 
@@ -829,7 +920,7 @@ class ClientAllergiesView(generic.DetailView):
         context = super(ClientAllergiesView, self).get_context_data(**kwargs)
         context['active_tab'] = 'prefs'
         context['client_status'] = Client.CLIENT_STATUS
-        
+
         """
         Here we need to add some variable of context to send to template :
          1 - A string active_tab who can be:
